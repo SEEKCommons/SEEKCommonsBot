@@ -1,13 +1,23 @@
 #!/bin/bash
 set -e
 
-# Build ?member VALUES list from stdin (each line is a QID).
-population_ids=$(sed 's/^/wd:/' | paste -sd' ' -)
+# Build QID list from stdin (one QID per line).
+mapfile -t qids
+clean_qids=()
+for qid in "${qids[@]}"; do
+  qid=${qid//[[:space:]]/}
+  if [ -n "$qid" ]; then
+    clean_qids+=("$qid")
+  fi
+done
 
-if [ -z "$population_ids" ]; then
+if [ ${#clean_qids[@]} -eq 0 ]; then
   echo "No population IDs provided on stdin." >&2
   exit 1
 fi
+
+tmp_out=$(mktemp)
+trap 'rm -f "$tmp_out" funding.rql' EXIT
 
 # Funding sources of SEEKCommons (Q118147033) members, using only Wikidata data
 # - Direct funder/sponsor on the person (P8324/P859)
@@ -15,7 +25,11 @@ fi
 #   detected by English label match: grant|scholarship|fellowship
 # - Funders/sponsors of works authored by the person (scholarly graph) (P50 -> P8324/P859)
 
-cat > funding.rql <<SPARQL
+for ((i=0; i<${#clean_qids[@]}; i+=100)); do
+  batch=("${clean_qids[@]:i:100}")
+  population_ids=$(printf 'wd:%s ' "${batch[@]}")
+
+  cat > funding.rql <<SPARQL
 SELECT DISTINCT ?fundingSource
 WHERE
 {
@@ -47,4 +61,12 @@ WHERE
 }
 SPARQL
 
-wd sparql -f table funding.rql | tail -n +2 | sort -u
+  wd sparql -f table funding.rql | tail -n +2 >> "$tmp_out"
+
+  # Pause between batches to avoid hammering the endpoint.
+  if [ $((i + 100)) -lt ${#clean_qids[@]} ]; then
+    sleep 1
+  fi
+done
+
+sort -u "$tmp_out"

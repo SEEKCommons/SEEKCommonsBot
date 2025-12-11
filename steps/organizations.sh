@@ -1,15 +1,29 @@
 #!/bin/bash
 set -e
 
-# Build ?member VALUES list from stdin (each line is a QID).
-population_ids=$(sed 's/^/wd:/' | paste -sd' ' -)
+# Build QID list from stdin (one QID per line).
+mapfile -t qids
+clean_qids=()
+for qid in "${qids[@]}"; do
+  qid=${qid//[[:space:]]/}
+  if [ -n "$qid" ]; then
+    clean_qids+=("$qid")
+  fi
+done
 
-if [ -z "$population_ids" ]; then
+if [ ${#clean_qids[@]} -eq 0 ]; then
   echo "No population IDs provided on stdin." >&2
   exit 1
 fi
 
-cat > orgs.rql <<SPARQL
+tmp_out=$(mktemp)
+trap 'rm -f "$tmp_out" orgs.rql' EXIT
+
+for ((i=0; i<${#clean_qids[@]}; i+=100)); do
+  batch=("${clean_qids[@]:i:100}")
+  population_ids=$(printf 'wd:%s ' "${batch[@]}")
+
+  cat > orgs.rql <<SPARQL
 SELECT DISTINCT ?org
 WHERE
 {
@@ -25,4 +39,12 @@ WHERE
 }
 SPARQL
 
-wd sparql -f table orgs.rql | tail -n +2 | sort -u
+  wd sparql -f table orgs.rql | tail -n +2 >> "$tmp_out"
+
+  # Pause between batches to avoid hammering the endpoint.
+  if [ $((i + 100)) -lt ${#clean_qids[@]} ]; then
+    sleep 1
+  fi
+done
+
+sort -u "$tmp_out"

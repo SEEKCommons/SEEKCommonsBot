@@ -1,15 +1,29 @@
 #!/bin/bash
 set -e
 
-# Build ?member VALUES list from stdin (each line is a QID).
-population_ids=$(sed 's/^/wd:/' | paste -sd' ' -)
+# Build QID list from stdin (one QID per line).
+mapfile -t qids
+clean_qids=()
+for qid in "${qids[@]}"; do
+  qid=${qid//[[:space:]]/}
+  if [ -n "$qid" ]; then
+    clean_qids+=("$qid")
+  fi
+done
 
-if [ -z "$population_ids" ]; then
+if [ ${#clean_qids[@]} -eq 0 ]; then
   echo "No population IDs provided on stdin." >&2
   exit 1
 fi
 
-cat > open-outputs.rql <<SPARQL
+tmp_out=$(mktemp)
+trap 'rm -f "$tmp_out" open-outputs.rql' EXIT
+
+for ((i=0; i<${#clean_qids[@]}; i+=100)); do
+  batch=("${clean_qids[@]:i:100}")
+  population_ids=$(printf 'wd:%s ' "${batch[@]}")
+
+  cat > open-outputs.rql <<SPARQL
 SELECT DISTINCT ?output
 WHERE
 {
@@ -51,7 +65,7 @@ WHERE
     FILTER( ?license IN ( wd:Q6938433, wd:Q20007257, wd:Q18199165 ) )
   }
   UNION
-  # 4) Educational resources (OER/educational resource types + CC0/CC BY/CC BY-SA)
+  # 4) Educational resources (OER/educational resource types + CC0/CC BY-SA)
   {
     VALUES ?eduType { wd:Q116781 }
     ?output wdt:P31/wdt:P279* ?eduType .
@@ -61,4 +75,12 @@ WHERE
 }
 SPARQL
 
-wd sparql -f table open-outputs.rql | tail -n +2 | sort -u
+  wd sparql -f table open-outputs.rql | tail -n +2 >> "$tmp_out"
+
+  # Pause between batches to avoid hammering the endpoint.
+  if [ $((i + 100)) -lt ${#clean_qids[@]} ]; then
+    sleep 1
+  fi
+done
+
+sort -u "$tmp_out"
