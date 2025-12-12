@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+trap 'rm -f coauthors.rql' EXIT
+
 # Build ?member VALUES list from stdin (each line is a QID).
 population_ids=$(sed 's/^/wd:/' | paste -sd' ' -)
 
