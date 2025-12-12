@@ -12,7 +12,7 @@ for qid in "${qids[@]}"; do
 done
 
 if [ ${#clean_qids[@]} -eq 0 ]; then
-  echo "No population IDs provided on stdin." >&2
+  echo "No QIDs provided on stdin." >&2
   exit 1
 fi
 
