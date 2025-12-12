@@ -1,11 +1,14 @@
 #!/bin/bash
 set -e
 
+tmp_out=$(mktemp)
+trap 'rm -f "$tmp_out" coauthors.rql' EXIT
+
 # Build ?member VALUES list from stdin (each line is a QID).
 population_ids=$(sed 's/^/wd:/' | paste -sd' ' -)
 
 if [ -z "$population_ids" ]; then
-  echo "No population IDs provided on stdin." >&2
+  echo "No QIDs provided on stdin." >&2
   exit 1
 fi
 endpoint="https://query-scholarly.wikidata.org/sparql"
@@ -24,8 +27,12 @@ WHERE
 }
 SPARQL
 
+
 # Run via curl because `wd sparql` lacks a flag to override the endpoint.
 curl -s -G "$endpoint" \
   -H 'Accept: text/tab-separated-values' \
   --data-urlencode query@coauthors.rql \
-  | tail -n +2 | tr -d '"' | sed -E 's#^.*/##; s/[<>]//g' | sort -u
+  | tail -n +2 | tr -d '"' | sed -E 's#^.*/##; s/[<>]//g' > "$tmp_out"
+
+echo "$population_ids" | tr ' ' '\n' | sed 's/^wd://' \
+  | cat - "$tmp_out" | sort -n

@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+trap 'rm -f population.rql' EXIT
+
 # search for SEEKCommons affiliations
 cat > population.rql <<SPARQL
 SELECT DISTINCT ?member

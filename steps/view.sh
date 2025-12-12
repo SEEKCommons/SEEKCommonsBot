@@ -17,27 +17,18 @@ if [ ${#clean_qids[@]} -eq 0 ]; then
 fi
 
 tmp_out=$(mktemp)
-trap 'rm -f "$tmp_out" ORCID.rql' EXIT
+trap 'rm -f "$tmp_out"' EXIT
 
-for ((i=0; i<${#clean_qids[@]}; i+=200)); do
-  batch=("${clean_qids[@]:i:200}")
+for ((i=0; i<${#clean_qids[@]}; i+=100)); do
+  batch=("${clean_qids[@]:i:100}")
   population_ids=$(printf 'wd:%s ' "${batch[@]}")
 
-  cat > ORCID.rql <<SPARQL
-SELECT DISTINCT ?member
-WHERE
-{
-  VALUES ?member { $population_ids }
-  FILTER NOT EXISTS { ?member wdt:P496 [] }
-}
-SPARQL
-
-  wd sparql -f table ORCID.rql | tail -n +2 >> "$tmp_out"
+  wd u $population_ids >> "$tmp_out"
 
   # Pause between batches to avoid hammering the endpoint.
-  if [ $((i + 200)) -lt ${#clean_qids[@]} ]; then
+  if [ $((i + 100)) -lt ${#clean_qids[@]} ]; then
     sleep 1
   fi
 done
 
-sort -u "$tmp_out"
+cat "$tmp_out"
