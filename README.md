@@ -19,11 +19,11 @@ cat data/*.txt | shuf -n 100 | steps/view.sh > sample.txt
 Initialize the database:
 
 ```bash
-seek_vectors build --in sample.txt --out sample.hdf5
+python seek_vectors.py build --in sample.txt --out sample.hdf5
 ```
 
 Query the database:
 
 ```bash
-seek_vectors query --h5 sample.hdf5 --query "What is the capital of France?" --top-k 20
+python seek_vectors.py query --h5 sample.hdf5 --text "What is the capital of France?" --top-k 20
 ```
